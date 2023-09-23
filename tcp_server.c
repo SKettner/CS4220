@@ -77,77 +77,32 @@ int main()
 
     while(1) 
 	{
-        fd_set reads;
-        reads = master;
-        if (select(max_socket+1, &reads, 0, 0, 0) < 0) 
-		{
-            fprintf(stderr, "select() failed. (%d)\n", GETSOCKETERRNO());
-            return 1;
-        }
-        
-        SOCKET i;
-        for(i = 1; i <= max_socket; ++i) 
-		{
-            if (FD_ISSET(i, &reads)) 
-			{
 
-                //printf("Something Happened\n");
-                //Handle socket
+
+        /* Receiving file size */
+        if(recv(welcomeSocket, buffer, BUFSIZ, 0) > 0)
+        {
+            printf("Got here\n");
+
+
+            int file_size = atoi(buffer);
+            fprintf(stdout, "\nFile size : %d\n", file_size);
+
+            FILE *received_file = fopen("Received.txt", "w");
+            
+            int remain_data = file_size;
+            size_t len = 0;
+
+            while ((remain_data > 0) && ((len = recv(welcomeSocket, buffer, BUFSIZ, 0)) > 0))
+            {
+                    fwrite(buffer, sizeof(char), len, received_file);
+                    remain_data -= len;
+                    fprintf(stdout, "Receive %d bytes and we hope :- %d bytes\n", len, remain_data);
             }
+            fclose(received_file);
         }
-        
-        
-        if (i == welcomeSocket) 
-		{
-            struct sockaddr_storage client_address;
-            socklen_t client_len = sizeof(client_address);
-            SOCKET socket_client = accept(welcomeSocket,
-                    (struct sockaddr*) &client_address,
-                    &client_len);
-            if (!ISVALIDSOCKET(socket_client)) 
-			{
-                fprintf(stderr, "accept() failed. (%d)\n",
-                        GETSOCKETERRNO());
-                return 1;
-            }
+        wait(1);
 
-            FD_SET(socket_client, &master);
-            if (socket_client > max_socket)
-			{
-				max_socket = socket_client;
-			} 
-
-            char address_buffer[100];
-            getnameinfo((struct sockaddr*)&client_address,
-                    client_len,
-                    address_buffer, sizeof(address_buffer), 0, 0,
-                    NI_NUMERICHOST);
-            printf("New connection from %s\n", address_buffer);
-
-        } 
-		
-		else 
-		{
-	        char read[1024];
-	        int bytes_received = recv(i, read, 1024, 0);
-	        if (bytes_received < 1) 
-			{
-	            FD_CLR(i, &master);
-	            CLOSESOCKET(i);
-	            continue;
-	        }
-	
-	        int j;
-	        for (j = 0; j < bytes_received; ++j)
-	        {
-		        read[j] = toupper(read[j]);
-		        send(i, read, bytes_received, 0);
-			}
-
-    	}
-    	
-    	          //  } //if FD_ISSET
-       // } //for i to max_socket
     } //while(1)
 
 

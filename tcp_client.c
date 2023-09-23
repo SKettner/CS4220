@@ -8,6 +8,9 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/select.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/sendfile.h>
 
 #define ISVALIDSOCKET(s) ((s) >= 0)
 #define CLOSESOCKET(s) close(s)
@@ -17,6 +20,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdlib.h>
 
 
 int main()
@@ -55,46 +59,35 @@ int main()
     connect(clientSocket, (struct sockaddr *) &serverAddr, addr_size);
     
     printf("Connected.\n");
-    printf("To send data, enter text followed by enter.\n");
     
-    while(1) 
-	{
+    FILE* file = fopen("readme.txt", "r");
 
-	    fd_set reads;
-	    FD_ZERO(&reads);
-	    FD_SET(clientSocket, &reads);
-	    
-	    struct timeval timeout;
-	    timeout.tv_sec = 0;
-	    timeout.tv_usec = 30;
+    printf("Sending: %s", read);
+    /* Sending file size */
+    int len = send(clientSocket, sizeof(file), sizeof(sizeof(file)), 0);
+    if (len < 0)
+    {
+            fprintf(stderr, "Error on sending greetings --> %s", strerror(errno));
 
-	    if (select(clientSocket+1, &reads, 0, 0, &timeout) < 0) 
-        {
-		        fprintf(stderr, "select() failed. (%d)\n", GETSOCKETERRNO());
-		        return 1;
-        }
+            exit(EXIT_FAILURE);
+    }
 
-	    if (FD_ISSET(clientSocket, &reads)) 
-		{
-	            char read[4096];
-	            int bytes_received = recv(clientSocket, read, 4096, 0);
-	            if (bytes_received < 1) 
-				{
-	                printf("Connection closed by peer.\n");
-	                break;
-	            }
-	            printf("Received (%d bytes): %.s", bytes_received, bytes_received, read);
-	    }
-		if(FD_ISSET(0, &reads)) 
-		{
-            printf("Got here");
-			char read[4096];
-			if (!fgets(read, 4096, stdin)) break;
-			printf("Sending: %s", read);
-			int bytes_sent = send(clientSocket, read, strlen(read), 0);
-			printf("Sent %d bytes.\n", bytes_sent);
-		}
-	}
+    fprintf(stdout, "Server sent %d bytes for the size\n", len);
+
+    int offset = 0;
+    int fd = 0;
+    int sent_bytes = 0;
+    int remain_data = sizeof(file);
+    /* Sending file data */
+    while (((sent_bytes = sendfile(clientSocket, fd, &offset, BUFSIZ)) > 0) && (remain_data > 0))
+    {
+            fprintf(stdout, "1. Server sent %d bytes from file's data, offset is now : %d and remaining data = %d\n", sent_bytes, offset, remain_data);
+            remain_data -= sent_bytes;
+            fprintf(stdout, "2. Server sent %d bytes from file's data, offset is now : %d and remaining data = %d\n", sent_bytes, offset, remain_data);
+    }
+
+    printf("Sent %d bytes.\n", sizeof(file));
+
 
     printf("Closing socket...\n");
     CLOSESOCKET(clientSocket);
