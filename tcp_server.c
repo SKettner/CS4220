@@ -80,28 +80,21 @@ int main()
 
 
         /* Receiving file size */
-        if(recv(welcomeSocket, buffer, BUFSIZ, 0) > 0)
+        int connectionMade = recv(welcomeSocket, buffer, BUFSIZ, 0); 
+        
+        if(connectionMade>0)
         {
             printf("Got here\n");
 
-
-            int file_size = atoi(buffer);
-            fprintf(stdout, "\nFile size : %d\n", file_size);
-
             FILE *received_file = fopen("Received.txt", "w");
             
-            int remain_data = file_size;
-            size_t len = 0;
+            fwrite(buffer, sizeof(char), BUFSIZ, received_file);
+            
+            printf("File Saved as Received.txt\n");
 
-            while ((remain_data > 0) && ((len = recv(welcomeSocket, buffer, BUFSIZ, 0)) > 0))
-            {
-                    fwrite(buffer, sizeof(char), len, received_file);
-                    remain_data -= len;
-                    fprintf(stdout, "Receive %d bytes and we hope :- %d bytes\n", len, remain_data);
-            }
             fclose(received_file);
         }
-        wait(1);
+        //wait(1);
 
     } //while(1)
 
