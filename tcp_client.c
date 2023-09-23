@@ -1,54 +1,58 @@
 /*tcp_client.c*/
 
-#if defined(_WIN32)
-#include <conio.h>
-#endif
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/select.h>
 
-int main(int argc, char *argv[]) 
+#define ISVALIDSOCKET(s) ((s) >= 0)
+#define CLOSESOCKET(s) close(s)
+#define SOCKET int
+#define GETSOCKETERRNO() (errno)
+
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
+
+int main()
 {
-    if (argc < 3) 
-	{
-        fprintf(stderr, "usage: tcp_client hostname port\n");
-        return 1;
-    }
     
     printf("Configuring remote address...\n");
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_socktype = SOCK_STREAM;
-    struct addrinfo *peer_address;
-    
-    if (getaddrinfo(argv[1], argv[2], &hints, &peer_address)) 
-	{
-        fprintf(stderr, "getaddrinfo() failed. (%d)\n", GETSOCKETERRNO());
-        return 1;
-    }
+    int clientSocket;
+    char buffer[1024];
+    struct sockaddr_in serverAddr;
+    socklen_t addr_size;
     
     printf("Remote address is: ");
     char address_buffer[100];
     char service_buffer[100];
-    getnameinfo(peer_address->ai_addr, peer_address->ai_addrlen,
-            address_buffer, sizeof(address_buffer),
-            service_buffer, sizeof(service_buffer),
-            NI_NUMERICHOST);
-    printf("%s %s\n", address_buffer, service_buffer);
     
     printf("Creating socket...\n");
-    SOCKET socket_peer;
-    socket_peer = socket(peer_address->ai_family,
-            peer_address->ai_socktype, peer_address->ai_protocol);
-    if (!ISVALIDSOCKET(socket_peer)) {
+    clientSocket = socket(PF_INET, SOCK_STREAM, 0); 
+    if (!ISVALIDSOCKET(clientSocket)) {
         fprintf(stderr, "socket() failed. (%d)\n", GETSOCKETERRNO());
         return 1;
     }
     
+
+    /*---- Configure settings of the server address struct ----*/
+    /* Address family = Internet */
+    serverAddr.sin_family = AF_INET;
+    /* Set port number, using htons function to use proper byte order */
+    serverAddr.sin_port = htons(9004);
+    /* Set IP address to localhost */
+    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    /* Set all bits of the padding field to 0 */
+    memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero); 
+
     printf("Connecting...\n");
-    if (connect(socket_peer,
-                peer_address->ai_addr, peer_address->ai_addrlen)) {
-        fprintf(stderr, "connect() failed. (%d)\n", GETSOCKETERRNO());
-        return 1;
-    }
-    freeaddrinfo(peer_address);
+    addr_size = sizeof serverAddr;
+    connect(clientSocket, (struct sockaddr *) &serverAddr, addr_size);
     
     printf("Connected.\n");
     printf("To send data, enter text followed by enter.\n");
@@ -58,43 +62,42 @@ int main(int argc, char *argv[])
 
 	    fd_set reads;
 	    FD_ZERO(&reads);
-	    FD_SET(socket_peer, &reads);
+	    FD_SET(clientSocket, &reads);
 	    
 	    struct timeval timeout;
 	    timeout.tv_sec = 0;
-	    timeout.tv_usec = 100000;
+	    timeout.tv_usec = 30;
 
-	    if (select(socket_peer+1, &reads, 0, 0, &timeout) < 0) 
-			{
+	    if (select(clientSocket+1, &reads, 0, 0, &timeout) < 0) 
+        {
 		        fprintf(stderr, "select() failed. (%d)\n", GETSOCKETERRNO());
 		        return 1;
-		    }
-	    
-	    if (FD_ISSET(socket_peer, &reads)) 
+        }
+
+	    if (FD_ISSET(clientSocket, &reads)) 
 		{
 	            char read[4096];
-	            int bytes_received = recv(socket_peer, read, 4096, 0);
+	            int bytes_received = recv(clientSocket, read, 4096, 0);
 	            if (bytes_received < 1) 
 				{
 	                printf("Connection closed by peer.\n");
 	                break;
 	            }
-	            printf("Received (%d bytes): %.*s",
-	   	        bytes_received, bytes_received, read);
+	            printf("Received (%d bytes): %.s", bytes_received, bytes_received, read);
 	    }
-	    
 		if(FD_ISSET(0, &reads)) 
 		{
+            printf("Got here");
 			char read[4096];
 			if (!fgets(read, 4096, stdin)) break;
 			printf("Sending: %s", read);
-			int bytes_sent = send(socket_peer, read, strlen(read), 0);
+			int bytes_sent = send(clientSocket, read, strlen(read), 0);
 			printf("Sent %d bytes.\n", bytes_sent);
 		}
 	}
 
     printf("Closing socket...\n");
-    CLOSESOCKET(socket_peer);
+    CLOSESOCKET(clientSocket);
 
     printf("Finished.\n");
     return 0;

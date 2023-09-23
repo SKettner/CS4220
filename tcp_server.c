@@ -12,6 +12,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/select.h>
 
 #define ISVALIDSOCKET(s) ((s) >= 0)
 #define CLOSESOCKET(s) close(s)
@@ -20,50 +21,57 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 int main() 
 {
 	printf("Configuring local address...\n");
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;
-
-    struct addrinfo *bind_address;
-    getaddrinfo(0, "8080", &hints, &bind_address);
+    int welcomeSocket, newSocket;
+    char buffer[1024];
+    struct sockaddr_in serverAddr;
+    struct sockaddr_storage serverStorage;
+    socklen_t addr_size;
 
 
     printf("Creating socket...\n");
-    SOCKET socket_listen;
-    socket_listen = socket(bind_address->ai_family,
-            bind_address->ai_socktype, bind_address->ai_protocol);
+    welcomeSocket = socket(PF_INET, SOCK_STREAM, 0);
+
             
-    if (!ISVALIDSOCKET(socket_listen)) 
+    if (!ISVALIDSOCKET(welcomeSocket)) 
 	{
         fprintf(stderr, "socket() failed. (%d)\n", GETSOCKETERRNO());
         return 1;
 	}	
 	
 	printf("Binding socket to local address...\n");
-    if (bind(socket_listen, bind_address->ai_addr, bind_address->ai_addrlen)) 
-	{
-        fprintf(stderr, "bind() failed. (%d)\n", GETSOCKETERRNO());
-        return 1;
-    }
-    freeaddrinfo(bind_address);
+    /*---- Configure settings of the server address struct ----*/
+    /* Address family = Internet */
+    serverAddr.sin_family = AF_INET;
+    /* Set port number, using htons function to use proper byte order */
+    serverAddr.sin_port = htons(9004);
+    /* Set IP address to localhost */
+    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    /* Set all bits of the padding field to 0 */
+    memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);  
+
+    /*---- Bind the address struct to the socket ----*/
+    bind(welcomeSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
 
     printf("Listening...\n");
-    if (listen(socket_listen, 10) < 0) 
+    if (listen(welcomeSocket, 5) == 0) 
 	{
-        fprintf(stderr, "listen() failed. (%d)\n", GETSOCKETERRNO());
-        return 1;
+        printf("Listening\n");
     }
+    else
+    {
+    printf("Error\n");        
+    }
+
     
     fd_set master;
     FD_ZERO(&master);
-    FD_SET(socket_listen, &master);
-    SOCKET max_socket = socket_listen;
+    FD_SET(welcomeSocket, &master);
+    SOCKET max_socket = welcomeSocket;
     
     printf("Waiting for connections...\n");
 
@@ -82,16 +90,18 @@ int main()
 		{
             if (FD_ISSET(i, &reads)) 
 			{
+
+                //printf("Something Happened\n");
                 //Handle socket
             }
         }
         
         
-        if (i == socket_listen) 
+        if (i == welcomeSocket) 
 		{
             struct sockaddr_storage client_address;
             socklen_t client_len = sizeof(client_address);
-            SOCKET socket_client = accept(socket_listen,
+            SOCKET socket_client = accept(welcomeSocket,
                     (struct sockaddr*) &client_address,
                     &client_len);
             if (!ISVALIDSOCKET(socket_client)) 
@@ -142,7 +152,7 @@ int main()
 
 
     printf("Closing listening socket...\n");
-    CLOSESOCKET(socket_listen);
+    CLOSESOCKET(welcomeSocket);
 
     printf("Finished.\n");
     return 0;
