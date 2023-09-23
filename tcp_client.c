@@ -66,7 +66,9 @@ int main()
     /* Sending file data */
     while(1)
     {
-        send(clientSocket, &file, sizeof(file), 0);
+        size_t temp = send(clientSocket, &file, sizeof(file), 0);
+
+        printf("Did sending work?  %d \n", temp);
 
         printf("Sent %d bytes.\n", sizeof(file));
     }
