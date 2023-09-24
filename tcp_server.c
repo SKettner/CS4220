@@ -1,10 +1,3 @@
-//#include <sys/types.h> 
-//#include <sys/socket.h> 
-//#include <netinet/in.h> 
-//#include <netdb.h>
-//#define SERVER PORT 12345 
-//#define BUF SIZE 4096
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -14,6 +7,8 @@
 #include <errno.h>
 #include <sys/select.h>
 
+
+//definitions used throughou the file
 #define ISVALIDSOCKET(s) ((s) >= 0)
 #define CLOSESOCKET(s) close(s)
 #define SOCKET int
@@ -25,7 +20,8 @@
 
 int main() 
 {
-	printf("Configuring local address...\n");
+	
+    //Vars for later use
     int welcomeSocket, newSocket;
     char buffer[1024];
     struct sockaddr_in serverAddr;
@@ -33,105 +29,111 @@ int main()
     socklen_t addr_size;
 
 
+    //this creates a socket that use IPV4(PF_INET), TCP(SOCK_STREAM),
+    //and the best protocol (0)
     printf("Creating socket...\n");
     welcomeSocket = socket(PF_INET, SOCK_STREAM, 0);
 
-            
+    //if this socket creation is not successful
     if (!ISVALIDSOCKET(welcomeSocket)) 
-	{
-        fprintf(stderr, "socket() failed. (%d)\n", GETSOCKETERRNO());
-        return 1;
-	}	
-	
-	printf("Binding socket to local address...\n");
-    /*---- Configure settings of the server address struct ----*/
-    /* Address family = Internet */
-    serverAddr.sin_family = AF_INET;
-    /* Set port number, using htons function to use proper byte order */
-    serverAddr.sin_port = htons(9004);
-    /* Set IP address to localhost */
-    serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    /* Set all bits of the padding field to 0 */
-    memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);  
-
-    /*---- Bind the address struct to the socket ----*/
-    bind(welcomeSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
-
-    printf("Listening...\n");
-    if (listen(welcomeSocket, 5) == 0) 
-	{
-        printf("Listening\n");
+    {
+        printf("Failed to create Socket.\n");
     }
     else
     {
-    printf("Error\n");        
-    }
+        printf("Created Socket.\n");
+        
+        //The following code was copied exactly from https://www.programminglogic.com/example-of-client-server-program-in-c-using-sockets-and-tcp/
+        //However this seems to be setting up where and how the 
+        //the client will be conecting with the server
 
-    
-    fd_set master;
-    FD_ZERO(&master);
-    FD_SET(welcomeSocket, &master);
-    SOCKET max_socket = welcomeSocket;
-    
-    printf("Waiting for connections...\n");
+        /*---- Configure settings of the server address struct ----*/
+        /* Address family = Internet */
+        serverAddr.sin_family = AF_INET;
+        /* Set port number, using htons function to use proper byte order */
+        serverAddr.sin_port = htons(9004);
+        /* Set IP address to localhost */
+        serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+        /* Set all bits of the padding field to 0 */
+        memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);  
 
-    while(1) 
-	{
-
-        SOCKET i;
-        for(i = 1; i <= max_socket; ++i) {
+        /*---- Bind the address struct to the socket ----*/
+        //binds welcomeSocket to serveraddress information found in the serverAddr var
+        bind(welcomeSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
 
 
-            if (i == welcomeSocket) 
-            {
-                
 
-                struct sockaddr_storage serverAddr;
-                socklen_t client_len = sizeof(serverAddr);
-                printf("Ran this\n");
+        //this waits for up to 5 connection on the welcome socket
+        if (listen(welcomeSocket, 5) == 0) 
+        {
+            printf("Listening...\n");
+        }
+        else
+        {
+        printf("Error\n");        
+        }
+        
+        printf("Waiting for connections...\n");
 
-                SOCKET socket_client = accept(welcomeSocket,
-                        (struct sockaddr*) &serverAddr,
-                        &client_len);
-                printf("Because?\n");
-                if (!ISVALIDSOCKET(socket_client)) {
+        //this stores the max number of Sockets we can have
+        SOCKET max_socket = welcomeSocket;
 
-                printf("Why?\n");
+        //this will loop for forever
+        while(1) 
+        {
 
-                    fprintf(stderr, "accept() failed. (%d)\n",
-                            GETSOCKETERRNO());
-                    return 1;
-                }
-            
+            //this loops through all of the posible connections on the socket
+            SOCKET i;
+            for(i = 1; i <= max_socket; ++i) {
 
-                int connectionMade = recv(socket_client, buffer, BUFSIZ, 0); 
-                
-                printf("Did reciving work?  %d \n", connectionMade);
+                //if we find  a connections
+                if (i == welcomeSocket) 
+                { 
+                    //declare some vars for latter use                         
+                    struct sockaddr_in new_addr;
+                    socklen_t addr_size = sizeof(new_addr);
 
-                if(connectionMade>0)
-                {
-                    printf("Got here\n");
 
-                    FILE *received_file = fopen("Received.txt", "w");
+                    //accept an incoming connection on welcomeSocket that stores client address
+                    //in new_addr and stores the size in addr_size
+                    SOCKET socket_client = accept(welcomeSocket, (struct sockaddr*)&new_addr, &addr_size);
                     
-                    fwrite(buffer, sizeof(char), BUFSIZ, received_file);
-                    
-                    printf("File Saved as Received.md\n");
+                    //declare file we will be saving to
+                    FILE *file = fopen("Received.txt", "w");
 
-                    fclose(received_file);
+                    //while we have more data to send
+                    while (1) 
+                    {   //take the data recived on socket_client and store in the buffer
+                        int anyMoreDataRecived = recv(socket_client, buffer, 1024, 0);
+                        if (anyMoreDataRecived <= 0)
+                        {
+                            printf("Finished Reciving All Data\n");
+                            break;
+                        }
+
+                        //prints data to file
+                        fputs(buffer, file);
+                        bzero(buffer, 1024);
+
+                        
+
+                    }
+                    
+                    //closes the file
+                    fclose(file);
+
                 }
+
             }
 
-        }
-        //wait(1);
-
-    } //while(1)
+        } //while(1)
 
 
-    printf("Closing listening socket...\n");
-    CLOSESOCKET(welcomeSocket);
+        printf("Closing listening socket...\n");
+        CLOSESOCKET(welcomeSocket);
 
-    printf("Finished.\n");
-    return 0;
+        printf("Finished.\n");
+        return 0;
+    }
 }
 
