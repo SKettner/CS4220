@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdlib.h>
 
 int main() 
 {
@@ -97,26 +98,64 @@ int main()
                     //accept an incoming connection on welcomeSocket that stores client address
                     //in new_addr and stores the size in addr_size
                     SOCKET socket_client = accept(welcomeSocket, (struct sockaddr*)&new_addr, &addr_size);
+
+                    printf("Connected\n");
+
+                    int expectedSeqNum = 0;
                     
                     //declare file we will be saving to
                     FILE *file = fopen("Received.txt", "w");
 
-                    //while we have more data to send
+                    //while we have more data to recive
                     while (1) 
                     {   //take the data recived on socket_client and store in the buffer
                         int anyMoreDataRecived = recv(socket_client, buffer, 1024, 0);
+                        printf("Data recived\n");
                         if (anyMoreDataRecived <= 0)
                         {
                             printf("Finished Reciving All Data\n");
                             break;
                         }
 
-                        //prints data to file
-                        fputs(buffer, file);
+                        char* dataRecived = buffer + 10;
+                        char seqNum[10];
+                        strncpy(seqNum, buffer, 10);
+                        for(int i = 0; i<10; i++)
+                        {
+                            if(seqNum[i]=='-')
+                            {
+                                seqNum[i] = '\0';
+                            }
+                        }
+
+                        printf("dataRecived: %s\n", dataRecived);
+
+                        printf("seqNum: %s\n", seqNum);
+
+                        if(atoi(seqNum)==expectedSeqNum)
+                        {
+                            //prints data to file
+                            fputs(dataRecived, file);
+
+                            size_t dataSizeSend = send(socket_client, seqNum, 10, 0);
+
+                            expectedSeqNum++;
+                        }
+                        else
+                        {
+                            int temp = expectedSeqNum-1;
+                            char dataToSend[10];
+                            sprintf(dataToSend, "%d", temp);
+
+                            printf("Data recived wrong: %s\n", dataToSend);
+
+                            size_t dataSizeSend = send(socket_client, dataToSend, 10, 0);
+
+                        }
+
+                        bzero(seqNum, 10);
+
                         bzero(buffer, 1024);
-
-                        
-
                     }
                     
                     //closes the file

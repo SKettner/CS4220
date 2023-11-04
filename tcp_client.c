@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/sendfile.h>
+#include <time.h>
 
 //definitions used throughou the file
 #define ISVALIDSOCKET(s) ((s) >= 0)
@@ -79,35 +80,140 @@ int main()
             //declare the file we are opening
             FILE* file = fopen("README.txt", "r");
 
+            fseek(file, 0L, SEEK_END);
 
-            printf("Sending: \n", file);
+            long int fileSize = ftell(file);
+
+            fseek(file, 0, SEEK_SET);
+
+
+            printf("Sending: \n");
 
             //this var will save the data we plan on sending 
-            char data[1024] = {0};
+            char data[fileSize];
 
-            /* Sending file data */
-            //this while loop runs until all the data has been pulled out of the file
-            while(fgets(data, 1024, file) != NULL)
-            {
-                //here is where we send the data over the socket we declared earlier
-                size_t dataSizeSend = send(clientSocket, data, sizeof(data), 0);
+            fread(data, 1, fileSize, file);
 
-                //if the data was send successfully 
-                if(dataSizeSend > 0)
-                {
-                    printf("Sent %d bytes.\n", sizeof(data));
-                }
-                else
-                {
-                    printf("Send failed.\n", sizeof(data));
-                }
+            char* currentData = data;
+            char* lastAckData = data;
 
-                //clear our var of currently sent data
-                bzero(data, 1024);
-            }
+            int N = fileSize/1024;
 
             //close the file
             fclose(file);
+
+            int sendBase = 0;
+            int nextSeqNum = 0;
+
+            clock_t startTime = clock();
+
+           
+
+            while(1)
+            {
+                printf("Got Here: \n");
+
+                while(nextSeqNum<(sendBase+N))
+                {
+                    printf("and Here: \n");
+
+                    char currentSeqNum[10];
+                    sprintf(currentSeqNum, "%d", nextSeqNum);
+                    strcat(currentSeqNum,"---------");
+                    printf("currentSeqNum: %s\n", currentSeqNum);
+
+                    char dataToSend[1024];
+                    strcat(dataToSend, currentSeqNum);
+
+                    char temp[1013];
+                    strncpy(temp, currentData, 1013);
+
+                    strcat(dataToSend, temp);
+                    dataToSend[1024] = '\0';
+                    printf("dataToSend2: %s\n", dataToSend);
+
+                    size_t dataSizeSend = send(clientSocket, dataToSend, 1024, 0);
+                    currentData += 1013;
+                    nextSeqNum++;
+
+                    printf("nextSeqNum: %d\n", nextSeqNum);
+                    printf("sendBase: %d\n", sendBase);
+                    printf("N: %d\n", N);
+
+                    bzero(currentSeqNum, 10);
+                    bzero(temp, 1013);
+                    bzero(dataToSend, 1024);
+                }
+
+                int anyMoreDataRecived = recv(clientSocket, buffer, 1024, 0);
+                printf("stuff: \n");
+
+                if(anyMoreDataRecived>0)
+                {
+                    printf("Then Here: \n");
+
+                    printf("sendBase: %d\n", sendBase);
+                    printf("N: %d\n", N);
+
+                    sendBase = 1 + atoi(buffer);
+                    
+                    if(sendBase >= N)
+                    {
+                        break;
+                    }
+                    if(sendBase == nextSeqNum)
+                    {
+                        startTime = clock();
+                    }
+                }
+            
+                if((clock() - startTime) > 15000)
+                {
+                    printf("Sutff: \n");
+
+                    startTime = clock();
+
+                    char * temp = lastAckData;
+                    int temp2 = sendBase;
+
+                    while(sendBase<=nextSeqNum)
+                    {
+                        char currentSeqNum[10];
+                        sprintf(currentSeqNum, "%d", sendBase);
+                        strcat(currentSeqNum,"---------");
+                        printf("currentSeqNum: %s\n", currentSeqNum);
+
+                        char dataToSend[1024];
+                        strcat(dataToSend, currentSeqNum);
+
+                        char temp[1013];
+                        strncpy(temp, lastAckData, 1013);
+
+                        strcat(dataToSend, temp);
+                        dataToSend[1024] = '\0';
+                        printf("dataToSend2: %s\n", dataToSend);
+
+                        size_t dataSizeSend = send(clientSocket, dataToSend, 1024, 0);
+                        currentData += 1013;
+                        nextSeqNum++;
+
+                        printf("nextSeqNum: %d\n", nextSeqNum);
+                        printf("sendBase: %d\n", sendBase);
+                        printf("N: %d\n", N);
+
+                        bzero(currentSeqNum, 10);
+                        bzero(temp, 1013);
+                        bzero(dataToSend, 1024);
+                    }
+
+                    lastAckData = temp;
+                    sendBase = temp2;
+
+                }
+
+                bzero(buffer, 10);
+
+            }
 
             printf("Closing socket...\n");
             CLOSESOCKET(clientSocket);

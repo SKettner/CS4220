@@ -1,4 +1,4 @@
-"# CS4"# CS4220" 
+CS4220
 Group:
 Roman Joska
 Sherman Kettner
