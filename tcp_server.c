@@ -117,6 +117,7 @@ int main()
                             break;
                         }
 
+                        //seperate the sequence number from the data
                         char* dataRecived = buffer + 10;
                         char seqNum[10];
                         strncpy(seqNum, buffer, 10);
@@ -128,10 +129,7 @@ int main()
                             }
                         }
 
-                        printf("dataRecived: %s\n", dataRecived);
-
-                        printf("seqNum: %s\n", seqNum);
-
+                        //if this was the data we expeceted 
                         if(atoi(seqNum)==expectedSeqNum)
                         {
                             //prints data to file
@@ -141,20 +139,19 @@ int main()
 
                             expectedSeqNum++;
                         }
+                        //if not the data we expect
                         else
                         {
+                            //tell it what data we need
                             int temp = expectedSeqNum-1;
                             char dataToSend[10];
                             sprintf(dataToSend, "%d", temp);
-
-                            printf("Data recived wrong: %s\n", dataToSend);
-
                             size_t dataSizeSend = send(socket_client, dataToSend, 10, 0);
 
                         }
 
+                        //clear out datastructs
                         bzero(seqNum, 10);
-
                         bzero(buffer, 1024);
                     }
                     

@@ -35,12 +35,17 @@ int main()
     
     char address_buffer[100];
     char service_buffer[100];
+    struct timeval tv;
+    tv.tv_sec = 15; 
+    
     
 
     //this creates a socket that use IPV4(PF_INET), TCP(SOCK_STREAM),
     //and the best protocol (0)
     printf("Creating socket...\n");
     clientSocket = socket(PF_INET, SOCK_STREAM, 0); 
+
+    setsockopt(clientSocket, SOL_SOCKET, SO_SNDTIMEO, (struct timeval *)&tv, sizeof(struct timeval));
 
     //if this socket creation is not successful
     if (!ISVALIDSOCKET(clientSocket)) 
@@ -80,137 +85,162 @@ int main()
             //declare the file we are opening
             FILE* file = fopen("README.txt", "r");
 
+            //takes us to end of file
             fseek(file, 0L, SEEK_END);
 
+            //finds length of file
             long int fileSize = ftell(file);
 
+            //takes us to beginning of file
             fseek(file, 0, SEEK_SET);
-
 
             printf("Sending: \n");
 
             //this var will save the data we plan on sending 
             char data[fileSize];
 
+            //read in all data from file
             fread(data, 1, fileSize, file);
 
+            //two pointers we will use to keep track of postions of data we are sending in the fi;e
             char* currentData = data;
             char* lastAckData = data;
 
+            //this figures out how many packages we have to send
             int N = fileSize/1024;
 
             //close the file
             fclose(file);
 
+
+            //this keeps track of how many packages we have sent since reciving a reply
             int sendBase = 0;
             int nextSeqNum = 0;
 
+
+            //keeps track of time since packets sent
             clock_t startTime = clock();
 
            
-
+            //as long as we have stuff to send and have not recived reply that it was recived
             while(1)
             {
-                printf("Got Here: \n");
-
+                
+                //for every packet that has not yet been sent and recived reply for
                 while(nextSeqNum<(sendBase+N))
                 {
-                    printf("and Here: \n");
-
+                    //this will be the part of the packet the dictates it order 
                     char currentSeqNum[10];
                     sprintf(currentSeqNum, "%d", nextSeqNum);
                     strcat(currentSeqNum,"---------");
-                    printf("currentSeqNum: %s\n", currentSeqNum);
 
+                    //this will store all data being sent in the packet
                     char dataToSend[1024];
                     strcat(dataToSend, currentSeqNum);
 
+                    //this will store the data from the file to send in the packet
                     char temp[1013];
                     strncpy(temp, currentData, 1013);
 
+                    //this will combine all data into packet
                     strcat(dataToSend, temp);
                     dataToSend[1024] = '\0';
-                    printf("dataToSend2: %s\n", dataToSend);
 
+
+                    //send all data in current packet it is sent dataToSend over clientSocket
+                    //size is 1024 bytes
                     size_t dataSizeSend = send(clientSocket, dataToSend, 1024, 0);
+
+                    //this tells us the next data and packet to send 
                     currentData += 1013;
                     nextSeqNum++;
 
-                    printf("nextSeqNum: %d\n", nextSeqNum);
-                    printf("sendBase: %d\n", sendBase);
-                    printf("N: %d\n", N);
-
+                    //this clears out all arrays
                     bzero(currentSeqNum, 10);
                     bzero(temp, 1013);
                     bzero(dataToSend, 1024);
                 }
 
+                //waits for reply of server for 15 secs
                 int anyMoreDataRecived = recv(clientSocket, buffer, 1024, 0);
-                printf("stuff: \n");
 
+                //if we get a reply
                 if(anyMoreDataRecived>0)
                 {
-                    printf("Then Here: \n");
-
-                    printf("sendBase: %d\n", sendBase);
-                    printf("N: %d\n", N);
-
+                    //this finds the current packet that is not know to have been recived
                     sendBase = 1 + atoi(buffer);
+                    lastAckData += (int)(sendBase*1013);
                     
+                    //if we have no more packets to send
                     if(sendBase >= N)
                     {
+                        //end the loop as this means we were succsessful
                         break;
                     }
-                    if(sendBase == nextSeqNum)
+                    //we that the next packet needed is the next one we are going to send
+                    if(!(sendBase == nextSeqNum))
                     {
+                        //reset timer since this is what should happen
                         startTime = clock();
+
                     }
                 }
             
+                //if 15 seconds have passed without a reply, or the reply was wrong
+                //and 15 seconds have passed 
                 if((clock() - startTime) > 15000)
                 {
-                    printf("Sutff: \n");
-
+                    //reset the timer
                     startTime = clock();
 
+                    //this will store data and return it incase these packets also fail
                     char * temp = lastAckData;
                     int temp2 = sendBase;
 
+                    //for every packet we need to send
                     while(sendBase<=nextSeqNum)
                     {
+
+                         //this will be the part of the packet the dictates it order 
                         char currentSeqNum[10];
                         sprintf(currentSeqNum, "%d", sendBase);
                         strcat(currentSeqNum,"---------");
-                        printf("currentSeqNum: %s\n", currentSeqNum);
 
+                        //this will store all data being sent in the packet
                         char dataToSend[1024];
                         strcat(dataToSend, currentSeqNum);
 
+                        //this will store the data from the file to send in the packet
                         char temp[1013];
                         strncpy(temp, lastAckData, 1013);
 
+
+                        //this will combine all data into packet
                         strcat(dataToSend, temp);
                         dataToSend[1024] = '\0';
-                        printf("dataToSend2: %s\n", dataToSend);
 
+
+                        //send all data in current packet it is sent dataToSend over clientSocket
+                        //size is 1024 bytes
                         size_t dataSizeSend = send(clientSocket, dataToSend, 1024, 0);
+
+                        //this tells us the next data and packet to send 
                         currentData += 1013;
                         nextSeqNum++;
 
-                        printf("nextSeqNum: %d\n", nextSeqNum);
-                        printf("sendBase: %d\n", sendBase);
-                        printf("N: %d\n", N);
-
+                          //this clears out all arrays
                         bzero(currentSeqNum, 10);
                         bzero(temp, 1013);
                         bzero(dataToSend, 1024);
                     }
 
+                    //reset all data back to last know recived 
                     lastAckData = temp;
                     sendBase = temp2;
 
                 }
 
+                //clear buffer
                 bzero(buffer, 10);
 
             }
